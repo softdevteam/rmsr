@@ -174,9 +174,6 @@ static int msr_open(struct inode *inode, struct file *file)
 	unsigned int cpu = iminor(file_inode(file));
 	struct cpuinfo_x86 *c;
 
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
-
 	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
 		return -ENXIO;	/* No such CPU */
 
@@ -184,6 +181,15 @@ static int msr_open(struct inode *inode, struct file *file)
 	if (!cpu_has(c, X86_FEATURE_MSR))
 		return -EIO;	/* MSR not supported */
 
+	return 0;
+}
+
+/*
+ * By default, use mode 660 (thus r/w for the root group)
+ */
+static int msr_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	add_uevent_var(env, "DEVMODE=%#o", 0660);
 	return 0;
 }
 
@@ -239,7 +245,7 @@ static struct notifier_block __refdata msr_class_cpu_notifier = {
 
 static char *msr_devnode(struct device *dev, umode_t *mode)
 {
-	return kasprintf(GFP_KERNEL, "cpu/%u/msr", MINOR(dev->devt));
+	return kasprintf(GFP_KERNEL, "cpu/%u/rmsr", MINOR(dev->devt));
 }
 
 static int __init msr_init(void)
@@ -259,6 +265,7 @@ static int __init msr_init(void)
 		goto out_chrdev;
 	}
 	msr_class->devnode = msr_devnode;
+	msr_class->dev_uevent = msr_uevent;
 
 	cpu_notifier_register_begin();
 	for_each_online_cpu(i) {
